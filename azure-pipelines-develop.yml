@@ -1,0 +1,120 @@
+### Develop Pipeline
+### Snapshot Branch Versioning Stategy: X.X.X-SNAPSHOT
+### Project :: kmdp-complex-ops-impl
+
+# !! Downstream Build: not decided yet; develop !! #
+
+trigger: 
+  branches:
+    include:
+      - develop
+    exclude:
+      - feature*
+  paths:
+    exclude:
+      - azure-pipelines-develop.yml
+      - azure-pipelines-features.yml
+      - release-notes.md
+      - README.md
+     
+# Sets Virtual Machine to Run Pipeline on
+pool:
+  vmImage: 'ubuntu-latest'
+
+# Gets Variables from Azure DevOps Library
+variables: 
+  - group: kmdp-platform-variables
+
+# ------------------ PIPELINE STEPS  ------------------
+steps:
+# Outputs pipeline steps have started
+- script: |
+    echo Starting Develop Branch Build Pipeline!
+    echo Project :: kmdp-complex-ops-impl
+  displayName: 'Starting Pipeline Steps'
+
+# Reads Root pom.xml File
+# Gets/Sets GAV from POM to Pipeline Variables
+- task: PowerShell@2
+  displayName: 'Get/Set POM Variables'
+  inputs:
+    targetType: 'inline'
+    script: |
+      [xml]$pomXml = Get-Content .\pom.xml
+      Write-Host --------------------------------
+      Write-Host POM Variables:
+      Write-Host GroupId: $pomXml.project.groupId
+      Write-Host ArtifactId: $pomXml.project.artifactId
+      Write-Host Version: $pomXml.project.version
+      Write-Host --------------------------------
+      Write-Host Setting GAV to local task variables
+      $groupId=$pomXml.project.groupId
+      $artifactId=$pomXml.project.artifactId
+      $version=$pomXml.project.version
+      Write-Host --------------------------------
+      Write-Host Setting GAV to pipeline variables
+      Write-Host "##vso[task.setvariable variable=projectSnapShotVersion]$version"
+      Write-Host "##vso[task.setvariable variable=projectGroupId]$groupId"
+      Write-Host "##vso[task.setvariable variable=projectArtifactId]$artifactId"
+
+# Gets .m2 Settings File from Azure DevOps Library
+# Downloads File for use in Pipeline
+- task: DownloadSecureFile@1
+  displayName: 'Downloads Secure .m2 Settings File'
+  name: settingsxml
+  inputs:
+    secureFile: settings-dev.xml
+
+# Write settings file to Build Server
+- task: PowerShell@2
+  displayName: 'Update m2 Settings File'
+  inputs:
+    targetType: 'inline'
+    script: |
+      New-Item -Type Directory -Force "${HOME}/.m2"
+      Copy-Item -Force "$(settingsxml.secureFilePath)" "${HOME}/.m2/settings.xml"
+
+# Authenticate to Maven Feed 
+- task: MavenAuthenticate@0
+  displayName: 'Maven Authenticate'
+  inputs:
+    artifactsFeeds: 'KMD'
+
+# Sets JDK 11 for Pipeline
+# Runs Maven Goal: validate
+- task: Maven@3
+  displayName: 'Sets Pipeline to JDK 11'
+  inputs:
+    mavenPomFile: 'pom.xml'
+    goals: 'validate'
+    options: '-ntp'
+    javaHomeOption: 'JDKVersion'
+    jdkVersionOption: '1.11'
+
+# Sets ALM/SLM Versioning Policy 
+# Sets Version Tranformation: none
+- task: AlmVersioning@4
+  displayName: 'SLM Update Version/Build #'
+  inputs:
+    projectType: java
+    versionFilePath: pom.xml
+    versionTransformation: none
+
+# Runs Maven Goal: deploy 
+# Deploys to Azure DevOps Artifacts
+- task: PowerShell@2
+  displayName: 'Maven Deploy to Artifacts'
+  inputs:
+    targetType: 'inline'
+    script: |
+      mvn deploy "-DaltDeploymentRepository=$env:DEPLOY_REPO::default::$env:DEPLOY_REPO_PATH" -ntp
+  env:
+    DEPLOY_REPO: $(deploymentRepo)
+    DEPLOY_REPO_PATH: $(deploymentRepoPath)
+
+# ------------------ END PIPELINE  ------------------
+# Outputs pipeline steps have ended
+- script: |
+    echo Ending Develop Branch Pipeline!
+  displayName: 'Ending Pipeline Steps' 
+  
