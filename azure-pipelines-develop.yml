@@ -16,6 +16,14 @@ trigger:
       - azure-pipelines-features.yml
       - release-notes.md
       - README.md
+
+resources:
+  pipelines:
+  - pipeline: kmdpComplexOpsImplDevelop
+    source: kmdpKnowledgeAssetRepositoryService
+    trigger: 
+      branches:
+      - develop
      
 # Sets Virtual Machine to Run Pipeline on
 pool:
