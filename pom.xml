@@ -5,16 +5,16 @@
   <parent>
     <groupId>edu.mayo.kmdp</groupId>
     <artifactId>kmdp-bom</artifactId>
-    <version>8.0.2</version>
+    <version>8.0.3-SNAPSHOT</version>
   </parent>
 
   <artifactId>kmdp-complex-ops-impl</artifactId>
-  <version>4.8.2</version>
+  <version>4.8.3-SNAPSHOT</version>
 
   <name>KMDP :: Reusable Complex Operations</name>
 
   <properties>
-    <kmdp.servers.version>4.8.2</kmdp.servers.version>
+    <kmdp.servers.version>4.8.3-SNAPSHOT</kmdp.servers.version>
   </properties>
 
   <dependencies>
