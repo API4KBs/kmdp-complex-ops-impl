@@ -23,8 +23,10 @@ import static org.omg.spec.api4kp._20200801.taxonomy.parsinglevel.ParsingLevelSe
 
 import edu.mayo.kmdp.knowledgebase.KnowledgeBaseProvider;
 import edu.mayo.kmdp.knowledgebase.assemblers.rdf.GraphBasedAssembler;
+import edu.mayo.kmdp.knowledgebase.binders.fhir.stu3.PlanDefDataShapeBinder;
 import edu.mayo.kmdp.knowledgebase.constructors.DependencyBasedConstructor;
 import edu.mayo.kmdp.knowledgebase.flatteners.fhir.stu3.PlanDefinitionFlattener;
+import edu.mayo.kmdp.knowledgebase.selectors.fhir.stu3.PlanDefSelector;
 import edu.mayo.kmdp.knowledgebase.weavers.fhir.stu3.DMNDefToPlanDefWeaver;
 import edu.mayo.kmdp.language.LanguageDeSerializer;
 import edu.mayo.kmdp.language.TransrepresentationExecutor;
@@ -32,20 +34,26 @@ import edu.mayo.kmdp.language.parsers.cmmn.v1_1.CMMN11Parser;
 import edu.mayo.kmdp.language.parsers.dmn.v1_2.DMN12Parser;
 import edu.mayo.kmdp.language.translators.cmmn.v1_1.CmmnToPlanDefTranslator;
 import edu.mayo.kmdp.language.translators.dmn.v1_2.DmnToPlanDefTranslator;
+import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 import javax.annotation.PostConstruct;
 import org.omg.spec.api4kp._20200801.Answer;
-import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.CompositionalApiInternal;
-import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.KnowledgeBaseApiInternal;
+import org.omg.spec.api4kp._20200801.api.inference.v4.server.ReasoningApiInternal._askQuery;
+import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.CompositionalApiInternal._assembleCompositeArtifact;
+import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.CompositionalApiInternal._flattenArtifact;
+import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.KnowledgeBaseApiInternal._getKnowledgeBaseStructure;
+import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.TranscreateApiInternal._applyNamedBind;
+import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.TranscreateApiInternal._applyNamedSelectDirect;
 import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.TranscreateApiInternal._applyNamedTransform;
 import org.omg.spec.api4kp._20200801.api.repository.asset.v4.KnowledgeAssetCatalogApi;
 import org.omg.spec.api4kp._20200801.api.repository.asset.v4.KnowledgeAssetRepositoryApi;
 import org.omg.spec.api4kp._20200801.api.terminology.v4.TermsApi;
 import org.omg.spec.api4kp._20200801.api.transrepresentation.v4.server.DeserializeApiInternal;
 import org.omg.spec.api4kp._20200801.api.transrepresentation.v4.server.TransxionApiInternal;
+import org.omg.spec.api4kp._20200801.id.Pointer;
 import org.omg.spec.api4kp._20200801.id.ResourceIdentifier;
 import org.omg.spec.api4kp._20200801.services.CompositeKnowledgeCarrier;
 import org.omg.spec.api4kp._20200801.services.KnowledgeCarrier;
@@ -61,18 +69,22 @@ public class CcpmToPlanDefPipeline implements _applyNamedTransform {
 
   ResourceIdentifier dictionaryAssetId;
   ResourceIdentifier dictionaryArtifactId;
+  URI[] annotationVocabularies;
 
   DeserializeApiInternal parser;
 
   TransxionApiInternal translator;
 
-  KnowledgeBaseApiInternal._getKnowledgeBaseStructure constructor;
+  _getKnowledgeBaseStructure constructor;
 
-  CompositionalApiInternal._flattenArtifact flattener;
+  _flattenArtifact flattener;
 
-  CompositionalApiInternal._assembleCompositeArtifact assembler;
+  _assembleCompositeArtifact assembler;
 
   KnowledgeBaseProvider kbManager;
+
+  _askQuery dataShapeQuery;
+
 
 
   protected Map<Integer, Consumer<Answer<KnowledgeCarrier>>> injectors = new HashMap<>();
@@ -82,13 +94,17 @@ public class CcpmToPlanDefPipeline implements _applyNamedTransform {
       ResourceIdentifier dictionaryArtifactId,
       @Autowired KnowledgeAssetCatalogApi cat,
       @Autowired KnowledgeAssetRepositoryApi repo,
-      @Autowired TermsApi terms
+      @Autowired TermsApi terms,
+      _askQuery dataShapeQuery,
+      URI... annotationVocabularies
   ) {
     this.dictionaryAssetId = dictionaryAssetId;
     this.dictionaryArtifactId = dictionaryArtifactId;
     this.cat = cat;
     this.repo = repo;
     this.terms = terms;
+    this.dataShapeQuery = dataShapeQuery;
+    this.annotationVocabularies = annotationVocabularies;
     init();
   }
 
@@ -113,7 +129,11 @@ public class CcpmToPlanDefPipeline implements _applyNamedTransform {
 
     kbManager
         = new KnowledgeBaseProvider(repo)
-        .withNamedWeaver(kbp -> new DMNDefToPlanDefWeaver(kbp, terms, dictionaryArtifactId.getResourceId()));
+        .withNamedWeaver(
+            kbp -> new DMNDefToPlanDefWeaver(kbp, terms, dictionaryArtifactId.getResourceId()))
+        .withNamedSelector(kbp -> new PlanDefSelector(kbp))
+    .withNamedBinder(kbp -> new PlanDefDataShapeBinder(kbp));
+
   }
 
   public CcpmToPlanDefPipeline addInjector(int index, Consumer<Answer<KnowledgeCarrier>> consumer) {
@@ -168,7 +188,7 @@ public class CcpmToPlanDefPipeline implements _applyNamedTransform {
 
     injector(2).accept(wovenComposite);
 
-    // Translate into PlanDefinition
+  // Translate into PlanDefinition
     Answer<KnowledgeCarrier> planDefinitions =
         wovenComposite.flatMap(kc ->
             translator.applyTransrepresent(kc, encode(rep(FHIR_STU3, SNOMED_CT, PCV)), null))
@@ -182,8 +202,31 @@ public class CcpmToPlanDefPipeline implements _applyNamedTransform {
         .reduce(kc -> flattener.flattenArtifact((CompositeKnowledgeCarrier) kc, rootAssetId));
     injector(4).accept(planDefinition);
 
+    // TODO FIXME Need to think about 'GC' for the kbManager.. when are KB released, vs overwritten?
+    planDefinition.map(kc -> kbManager.deleteKnowledgeBase(kc.getAssetId().getUuid()));
+
+    // prepare for the binding of the data shapes
+    Answer<Pointer> planDefKB = planDefinition
+        .flatMap(kbManager::initKnowledgeBase);
+
+    // TODO can this be simplified? The API chaining is not yet as smooth as it should be
+    Answer<KnowledgeCarrier> shapedPlanDef = planDefKB
+        .flatMap(pdPtr -> kbManager.namedSelect(
+            pdPtr.getUuid(), pdPtr.getVersionTag(),
+            PlanDefSelector.id, PlanDefSelector.pivotQuery(annotationVocabularies), null))
+        .flatMap(conceptsPtr ->
+                kbManager
+                    .getKnowledgeBaseManifestation(conceptsPtr.getUuid(), conceptsPtr.getVersionTag())
+                    .flatMap(selectedConcepts ->
+                        dataShapeQuery.askQuery(null, null, selectedConcepts))
+                    .map(bindingList -> bindingList.get(0))
+        .flatMap(bindings -> planDefKB.flatMap(pd -> kbManager.bind(pd.getUuid(),pd.getVersionTag(),bindings)))
+        .flatMap(ptr -> kbManager.getKnowledgeBaseManifestation(ptr.getUuid(),ptr.getVersionTag())));
+
+    injector(5).accept(shapedPlanDef);
+
     // And finally unwrap...
-    return planDefinition;
+    return shapedPlanDef;
   }
 
 
