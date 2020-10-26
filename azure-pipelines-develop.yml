@@ -17,6 +17,7 @@ trigger:
       - release-notes.md
       - README.md
 
+# Watches upstream build for success to run
 resources:
   pipelines:
   - pipeline: kmdpComplexOpsImplDevelop
