@@ -25,6 +25,7 @@ import edu.mayo.kmdp.knowledgebase.KnowledgeBaseProvider;
 import edu.mayo.kmdp.knowledgebase.assemblers.rdf.GraphBasedAssembler;
 import edu.mayo.kmdp.knowledgebase.binders.fhir.stu3.PlanDefDataShapeBinder;
 import edu.mayo.kmdp.knowledgebase.constructors.DependencyBasedConstructor;
+import edu.mayo.kmdp.knowledgebase.flatteners.dmn.v1_2.DMN12ModelFlattener;
 import edu.mayo.kmdp.knowledgebase.flatteners.fhir.stu3.PlanDefinitionFlattener;
 import edu.mayo.kmdp.knowledgebase.selectors.fhir.stu3.PlanDefSelector;
 import edu.mayo.kmdp.knowledgebase.weavers.fhir.stu3.DMNDefToPlanDefWeaver;
@@ -45,8 +46,6 @@ import org.omg.spec.api4kp._20200801.api.inference.v4.server.ReasoningApiInterna
 import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.CompositionalApiInternal._assembleCompositeArtifact;
 import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.CompositionalApiInternal._flattenArtifact;
 import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.KnowledgeBaseApiInternal._getKnowledgeBaseStructure;
-import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.TranscreateApiInternal._applyNamedBind;
-import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.TranscreateApiInternal._applyNamedSelectDirect;
 import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.TranscreateApiInternal._applyNamedTransform;
 import org.omg.spec.api4kp._20200801.api.repository.asset.v4.KnowledgeAssetCatalogApi;
 import org.omg.spec.api4kp._20200801.api.repository.asset.v4.KnowledgeAssetRepositoryApi;
@@ -132,7 +131,8 @@ public class CcpmToPlanDefPipeline implements _applyNamedTransform {
         .withNamedWeaver(
             kbp -> new DMNDefToPlanDefWeaver(kbp, terms, dictionaryArtifactId.getResourceId()))
         .withNamedSelector(kbp -> new PlanDefSelector(kbp))
-    .withNamedBinder(kbp -> new PlanDefDataShapeBinder(kbp));
+        .withNamedBinder(kbp -> new PlanDefDataShapeBinder(kbp))
+        .withNamedFlattener(kbp -> new DMN12ModelFlattener(kbp));
 
   }
 
@@ -183,6 +183,8 @@ public class CcpmToPlanDefPipeline implements _applyNamedTransform {
             kbManager.initKnowledgeBase(kc)
                 .flatMap(pid ->
                     kbManager.weave(pid.getUuid(), pid.getVersionTag(), dictionary))
+                .flatMap(wid ->
+                    kbManager.flatten(wid.getUuid(),wid.getVersionTag(),null))
                 .flatMap(dId ->
                     kbManager.getKnowledgeBaseManifestation(dId.getUuid(), dId.getVersionTag())));
 
