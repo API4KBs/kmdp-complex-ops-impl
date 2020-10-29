@@ -1,5 +1,7 @@
 package edu.mayo.kmdp.ops.tranx.owl2;
 
+import static java.util.Arrays.asList;
+import static org.omg.spec.api4kp._20200801.AbstractCarrier.ofHeterogeneousComposite;
 import static org.omg.spec.api4kp._20200801.AbstractCarrier.rep;
 import static org.omg.spec.api4kp._20200801.taxonomy.krformat.snapshot.SerializationFormat.TXT;
 import static org.omg.spec.api4kp._20200801.taxonomy.krlanguage.snapshot.KnowledgeRepresentationLanguage.OWL_2;
@@ -10,14 +12,14 @@ import edu.mayo.kmdp.knowledgebase.KnowledgeBaseProvider;
 import edu.mayo.kmdp.knowledgebase.constructors.JenaOwlImportConstructor;
 import edu.mayo.kmdp.knowledgebase.extractors.rdf.SimplePivotExtractor;
 import edu.mayo.kmdp.knowledgebase.flatteners.rdf.JenaModelFlattener;
+import edu.mayo.kmdp.knowledgebase.selectors.skos.JenaSKOSSelector;
 import edu.mayo.kmdp.knowledgebase.selectors.sparql.v1_1.SparqlSelector;
 import edu.mayo.kmdp.language.parsers.owl2.JenaOwlParser;
 import edu.mayo.kmdp.language.translators.owl2.OWLtoSKOSTranscreator;
-import edu.mayo.kmdp.terms.mireot.MireotConfig;
-import edu.mayo.kmdp.terms.mireot.MireotConfig.MireotParameters;
 import edu.mayo.kmdp.terms.mireot.MireotExtractor;
-import edu.mayo.kmdp.terms.skosifier.Owl2SkosConfig;
 import edu.mayo.kmdp.terms.skosifier.Owl2SkosConfig.OWLtoSKOSTxParams;
+import edu.mayo.kmdp.util.PropertiesUtil;
+import java.util.Properties;
 import org.omg.spec.api4kp._20200801.AbstractCarrier;
 import org.omg.spec.api4kp._20200801.Answer;
 import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.KnowledgeBaseApiInternal;
@@ -36,10 +38,13 @@ public class ComplexOwl2SKOSTransrepresentator implements _applyTransrepresent {
   // tranx
   _applyTransrepresent skosifier = new OWLtoSKOSTranscreator();
 
+  JenaModelFlattener jenaFlattener = new JenaModelFlattener();
+
   // knowledgebase
   KnowledgeBaseApiInternal kbManager = new KnowledgeBaseProvider(null)
       .withNamedSelector(SparqlSelector::new)
-      .withNamedFlattener(new JenaModelFlattener())
+      .withNamedSelector(JenaSKOSSelector::new)
+      .withNamedFlattener(jenaFlattener)
       .withNamedExtractor(SimplePivotExtractor::new);
   _getKnowledgeBaseStructure constructor = new JenaOwlImportConstructor(kbManager);
 
@@ -52,6 +57,8 @@ public class ComplexOwl2SKOSTransrepresentator implements _applyTransrepresent {
   public Answer<KnowledgeCarrier> applyTransrepresent(KnowledgeCarrier sourceArtifact,
       String xAccept, String xParams) {
 
+    final Properties allprops = PropertiesUtil.parseProperties(xParams);
+
     Pointer kbRef = newKB();
 
     sourceArtifact.components()
@@ -62,34 +69,60 @@ public class ComplexOwl2SKOSTransrepresentator implements _applyTransrepresent {
     addStructureToKB(kbRef);
 
     return kbManager.getKnowledgeBaseComponents(kbRef.getUuid(), kbRef.getVersionTag())
-        .flatList(Pointer.class, compPtr -> skosify(kbRef, compPtr))
+        .flatList(Pointer.class, compPtr -> skosify(kbRef, compPtr, allprops))
         .map(AbstractCarrier::ofHeterogeneousComposite);
   }
 
 
-  public Answer<KnowledgeCarrier> skosify(Pointer kBaseRef, Pointer ontoPtr) {
-    return extractOntologyComponent(kBaseRef,ontoPtr)
-        .flatMap(this::flattenKB)
-        .flatMap(this::mireotOntology)
-        .flatMap(kc -> owlToSkos(kc, getSkosifierProperties(ontoPtr).encode()));
+  public Answer<KnowledgeCarrier> skosify(Pointer kBaseRef, Pointer ontoPtr, Properties props) {
+    Answer<Pointer> comp = extractOntologyComponent(kBaseRef, ontoPtr)
+        .flatMap(this::flattenKB);
+
+    Answer<KnowledgeCarrier> ans2 = comp
+        .flatMap(kbComp -> selectSKOS(kBaseRef, kbComp, props));
+
+    Answer<KnowledgeCarrier> ans1 = comp
+        .flatMap(o -> mireotOntology(o,props))
+        .flatMap(ptr -> owlToSkos(ptr, getSkosifierProperties(props, ontoPtr)));
+
+    Answer<KnowledgeCarrier> ans =
+        ans1.flatMap(x1 ->
+            ans2.flatMap(x2 -> jenaFlattener.flattenArtifact(
+                ofHeterogeneousComposite(asList(x1, x2)).withRootId(x1.getAssetId()),
+                x1.getAssetId().getUuid())));
+
+    return ans;
   }
 
-  protected Answer<KnowledgeCarrier> owlToSkos(KnowledgeCarrier kc, String cfg) {
-    return skosifier.applyTransrepresent(
-            kc,
-            ModelMIMECoder.encode(rep(OWL_2)),
-            cfg);
-  }
-
-  protected Answer<KnowledgeCarrier> mireotOntology(Pointer flatPtr) {
+  private Answer<KnowledgeCarrier> selectSKOS(
+      Pointer kBaseRef, Pointer onto, Properties props) {
     return kbManager
-        .select(flatPtr.getUuid(), flatPtr.getVersionTag(), selectQuery, getMireotProperties().encode())
+        .namedSelect(onto.getUuid(), onto.getVersionTag(),
+            JenaSKOSSelector.id, null, PropertiesUtil.serializeProps(props))
         .flatMap(ptr -> kbManager
             .getKnowledgeBaseManifestation(ptr.getUuid(), ptr.getVersionTag()));
   }
 
+
+  protected Answer<KnowledgeCarrier> owlToSkos(Pointer ptr, Properties cfg) {
+    Answer<KnowledgeCarrier> ans1 = kbManager
+        .getKnowledgeBaseManifestation(ptr.getUuid(), ptr.getVersionTag())
+        .flatMap(kc -> skosifier.applyTransrepresent(
+            kc,
+            ModelMIMECoder.encode(rep(OWL_2)),
+            PropertiesUtil.serializeProps(cfg)));
+
+    return ans1;
+  }
+
+  protected Answer<Pointer> mireotOntology(Pointer flatPtr, Properties props) {
+    return kbManager
+        .namedSelect(flatPtr.getUuid(), flatPtr.getVersionTag(),
+            SparqlSelector.id, selectQuery, PropertiesUtil.serializeProps(props));
+  }
+
   protected Answer<Pointer> flattenKB(Pointer pivotKB) {
-    return kbManager.flatten(pivotKB.getUuid(), pivotKB.getVersionTag(), "clear");
+    return kbManager.flatten(pivotKB.getUuid(), pivotKB.getVersionTag(), null);
   }
 
   protected Answer<Pointer> extractOntologyComponent(Pointer kBaseRef, Pointer ontoPtr) {
@@ -117,22 +150,12 @@ public class ComplexOwl2SKOSTransrepresentator implements _applyTransrepresent {
     kbManager.populateKnowledgeBase(kbRef.getUuid(), kbRef.getVersionTag(), parsedOntology);
   }
 
-  protected MireotConfig getMireotProperties() {
-    return new MireotConfig()
-        .with(MireotParameters.BASE_URI,
-            "http://ontology.mayo.edu/ontologies/clinicalsituationontology/")
-        .with(MireotParameters.MIN_DEPTH, "1")
-        .with(MireotParameters.TARGET_URI,
-            "http://ontology.mayo.edu/ontologies/clinicalsituationontology/3c338081-b709-427e-8a51-76bb8f6ef26d");
-  }
 
-  protected Owl2SkosConfig getSkosifierProperties(Pointer kc) {
-    String name = kc.getName();
-    return new Owl2SkosConfig()
-        .with(OWLtoSKOSTxParams.SCHEME_NAME, name + "ClinicalSituations")
-        .with(OWLtoSKOSTxParams.TOP_CONCEPT_NAME, name + "ClinicalSituation")
-        .with(OWLtoSKOSTxParams.TGT_NAMESPACE,
-            "https://ontology.mayo.edu/taxonomies/clinicalsituations");
+  private Properties getSkosifierProperties(Properties props, Pointer ptr) {
+    String name = ptr.getName();
+    props.put(OWLtoSKOSTxParams.SCHEME_NAME.getName(), name + "ClinicalSituations");
+    props.put(OWLtoSKOSTxParams.TOP_CONCEPT_NAME.getName(), name + "ClinicalSituation");
+    return props;
   }
 
 
