@@ -14,8 +14,8 @@
 package edu.mayo.kmdp.ops.tranx.bpm;
 
 import static java.util.Arrays.asList;
-import static org.omg.spec.api4kp._20200801.AbstractCarrier.ofHeterogeneousComposite;
 import static org.omg.spec.api4kp._20200801.AbstractCarrier.rep;
+import static org.omg.spec.api4kp._20200801.AbstractCompositeCarrier.ofMixedAnonymousComposite;
 import static org.omg.spec.api4kp._20200801.services.transrepresentation.ModelMIMECoder.encode;
 import static org.omg.spec.api4kp._20200801.taxonomy.krlanguage.KnowledgeRepresentationLanguageSeries.CMMN_1_1;
 import static org.omg.spec.api4kp._20200801.taxonomy.krlanguage.KnowledgeRepresentationLanguageSeries.FHIR_STU3;
@@ -45,6 +45,7 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import javax.annotation.PostConstruct;
 import org.omg.spec.api4kp._20200801.Answer;
+import org.omg.spec.api4kp._20200801.Composite;
 import org.omg.spec.api4kp._20200801.api.inference.v4.server.ReasoningApiInternal._askQuery;
 import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.CompositionalApiInternal._assembleCompositeArtifact;
 import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.CompositionalApiInternal._flattenArtifact;
@@ -222,15 +223,15 @@ public class CcpmToPlanDefPipeline implements _applyNamedTransform {
 
     List<KnowledgeCarrier> flatComps = allComps.stream()
         .map(kc -> {
-          if (kc.getRepresentation().getLanguage().sameAs(CMMN_1_1)) {
+          if (CMMN_1_1.sameAs(kc.getRepresentation().getLanguage())) {
             return kc;
           } else {
             ResourceIdentifier rootId = kc.getAssetId();
             return dmnFlattener
                 .flattenArtifact(
-                    ofHeterogeneousComposite(allComps).withRootId(rootId),
+                    ofMixedAnonymousComposite(rootId, allComps),
                     rootId.getUuid())
-                .orElseThrow(() -> new RuntimeException());
+                .orElseThrow(RuntimeException::new);
           }
         }).collect(Collectors.toList());
 

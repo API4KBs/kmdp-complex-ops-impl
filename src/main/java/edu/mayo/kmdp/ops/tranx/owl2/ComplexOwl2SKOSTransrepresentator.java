@@ -1,8 +1,8 @@
 package edu.mayo.kmdp.ops.tranx.owl2;
 
 import static java.util.Arrays.asList;
-import static org.omg.spec.api4kp._20200801.AbstractCarrier.ofHeterogeneousComposite;
 import static org.omg.spec.api4kp._20200801.AbstractCarrier.rep;
+import static org.omg.spec.api4kp._20200801.AbstractCompositeCarrier.ofUniformAnonymousComposite;
 import static org.omg.spec.api4kp._20200801.taxonomy.krformat.snapshot.SerializationFormat.TXT;
 import static org.omg.spec.api4kp._20200801.taxonomy.krlanguage.snapshot.KnowledgeRepresentationLanguage.OWL_2;
 import static org.omg.spec.api4kp._20200801.taxonomy.krlanguage.snapshot.KnowledgeRepresentationLanguage.SPARQL_1_1;
@@ -21,7 +21,9 @@ import edu.mayo.kmdp.terms.skosifier.Owl2SkosConfig.OWLtoSKOSTxParams;
 import edu.mayo.kmdp.util.PropertiesUtil;
 import java.util.Properties;
 import org.omg.spec.api4kp._20200801.AbstractCarrier;
+import org.omg.spec.api4kp._20200801.AbstractCompositeCarrier;
 import org.omg.spec.api4kp._20200801.Answer;
+import org.omg.spec.api4kp._20200801.Composite;
 import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.KnowledgeBaseApiInternal;
 import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.KnowledgeBaseApiInternal._getKnowledgeBaseStructure;
 import org.omg.spec.api4kp._20200801.api.transrepresentation.v4.server.DeserializeApiInternal._applyLift;
@@ -70,7 +72,7 @@ public class ComplexOwl2SKOSTransrepresentator implements _applyTransrepresent {
 
     return kbManager.getKnowledgeBaseComponents(kbRef.getUuid(), kbRef.getVersionTag())
         .flatList(Pointer.class, compPtr -> skosify(kbRef, compPtr, allprops))
-        .map(AbstractCarrier::ofHeterogeneousComposite);
+        .map(AbstractCompositeCarrier::ofUniformAggregate);
   }
 
 
@@ -88,7 +90,7 @@ public class ComplexOwl2SKOSTransrepresentator implements _applyTransrepresent {
     Answer<KnowledgeCarrier> ans =
         ans1.flatMap(x1 ->
             ans2.flatMap(x2 -> jenaFlattener.flattenArtifact(
-                ofHeterogeneousComposite(asList(x1, x2)).withRootId(x1.getAssetId()),
+                ofUniformAnonymousComposite(x1.getAssetId(), asList(x1, x2)),
                 x1.getAssetId().getUuid())));
 
     return ans;
