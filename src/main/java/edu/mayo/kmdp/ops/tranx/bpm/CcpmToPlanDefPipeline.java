@@ -24,9 +24,7 @@ import static org.omg.spec.api4kp._20200801.taxonomy.lexicon.LexiconSeries.SNOME
 import static org.omg.spec.api4kp._20200801.taxonomy.parsinglevel.ParsingLevelSeries.Abstract_Knowledge_Expression;
 
 import edu.mayo.kmdp.knowledgebase.KnowledgeBaseProvider;
-import edu.mayo.kmdp.knowledgebase.assemblers.rdf.GraphBasedAssembler;
 import edu.mayo.kmdp.knowledgebase.binders.fhir.stu3.PlanDefDataShapeBinder;
-import edu.mayo.kmdp.knowledgebase.constructors.DependencyBasedConstructor;
 import edu.mayo.kmdp.knowledgebase.flatteners.dmn.v1_2.DMN12ModelFlattener;
 import edu.mayo.kmdp.knowledgebase.flatteners.fhir.stu3.PlanDefinitionFlattener;
 import edu.mayo.kmdp.knowledgebase.selectors.fhir.stu3.PlanDefSelector;
@@ -45,11 +43,9 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import javax.annotation.PostConstruct;
 import org.omg.spec.api4kp._20200801.Answer;
-import org.omg.spec.api4kp._20200801.Composite;
 import org.omg.spec.api4kp._20200801.api.inference.v4.server.ReasoningApiInternal._askQuery;
-import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.CompositionalApiInternal._assembleCompositeArtifact;
 import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.CompositionalApiInternal._flattenArtifact;
-import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.KnowledgeBaseApiInternal._getKnowledgeBaseStructure;
+import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.KnowledgeBaseApiInternal._initKnowledgeBase;
 import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.TranscreateApiInternal._applyNamedTransform;
 import org.omg.spec.api4kp._20200801.api.repository.asset.v4.KnowledgeAssetCatalogApi;
 import org.omg.spec.api4kp._20200801.api.repository.asset.v4.KnowledgeAssetRepositoryApi;
@@ -62,7 +58,7 @@ import org.omg.spec.api4kp._20200801.services.CompositeKnowledgeCarrier;
 import org.omg.spec.api4kp._20200801.services.KnowledgeCarrier;
 import org.springframework.beans.factory.annotation.Autowired;
 
-public class CcpmToPlanDefPipeline implements _applyNamedTransform {
+public abstract class CcpmToPlanDefPipeline implements _applyNamedTransform, _initKnowledgeBase {
 
   public static final UUID id = UUID.fromString("77234f8c-718b-4429-b800-8b17369bc215");
 
@@ -76,13 +72,9 @@ public class CcpmToPlanDefPipeline implements _applyNamedTransform {
 
   TransxionApiInternal translator;
 
-  _getKnowledgeBaseStructure constructor;
-
   _flattenArtifact flattener;
 
   _flattenArtifact dmnFlattener;
-
-  _assembleCompositeArtifact assembler;
 
   KnowledgeBaseProvider kbManager;
 
@@ -106,7 +98,6 @@ public class CcpmToPlanDefPipeline implements _applyNamedTransform {
     init();
   }
 
-
   @PostConstruct
   protected void init() {
     parser =
@@ -116,8 +107,6 @@ public class CcpmToPlanDefPipeline implements _applyNamedTransform {
         asList(new CmmnToPlanDefTranslator(), new DmnToPlanDefTranslator())
     );
 
-    constructor
-        = DependencyBasedConstructor.newInstance(cat);
 
     flattener
         = new PlanDefinitionFlattener();
@@ -125,13 +114,10 @@ public class CcpmToPlanDefPipeline implements _applyNamedTransform {
     dmnFlattener
         = new DMN12ModelFlattener();
 
-    assembler
-        = GraphBasedAssembler.newInstance(repo);
-
     kbManager
         = new KnowledgeBaseProvider(repo)
-        .withNamedSelector(kbp -> new PlanDefSelector(kbp))
-        .withNamedBinder(kbp -> new PlanDefDataShapeBinder(kbp));
+        .withNamedSelector(PlanDefSelector::new)
+        .withNamedBinder(PlanDefDataShapeBinder::new);
 
   }
 
@@ -145,25 +131,27 @@ public class CcpmToPlanDefPipeline implements _applyNamedTransform {
     });
   }
 
-
   @Override
   public Answer<KnowledgeCarrier> applyNamedTransform(UUID operatorId, UUID kbaseId,
       String versionTag, String xParams) {
-    UUID rootAssetId = kbaseId;
-    String rootAssetVersionTag = versionTag;
+    try {
+      return doTransform(operatorId, kbaseId, versionTag, xParams);
+    } finally {
+      kbManager.deleteKnowledgeBase(kbaseId);
+    }
+  }
 
-    // The dependency-based constructor considers the given asset as the root of a tree-based knowledge base,
-    // implicitly defined by the query { caseModel dependsOn* decisionModel }
-    // In particular, in this case we have
-    //    { caseModel dependsOn* decisionModel }
-    // The operation then returns a 'structure', which is effectively an 'intensional' manifestation of a new, composite Asset
-    Answer<KnowledgeCarrier> struct =
-        constructor.getKnowledgeBaseStructure(rootAssetId, rootAssetVersionTag);
-    injector(0).accept(struct);
+  protected Answer<KnowledgeCarrier> doTransform(UUID operatorId, UUID kbaseId,
+      String versionTag, String xParams) {
 
-    // Now fetch the components to create a Composite Artifact
     Answer<KnowledgeCarrier> composite =
-        struct.flatMap(kc -> assembler.assembleCompositeArtifact(kc));
+        kbManager.getKnowledgeBaseManifestation(kbaseId, versionTag);
+    UUID rootId = composite.get().mainComponent().getAssetId().getUuid();
+
+    Answer<KnowledgeCarrier> struct = composite
+        .map(CompositeKnowledgeCarrier.class::cast)
+        .map(CompositeKnowledgeCarrier::getStruct);
+    injector(0).accept(struct);
 
     // Parse
     Answer<KnowledgeCarrier> parsedComposite =
@@ -184,7 +172,7 @@ public class CcpmToPlanDefPipeline implements _applyNamedTransform {
 
     // Flatten the composite, which at this point is homogeneous FHIR PlanDef
     Answer<KnowledgeCarrier> planDefinition = planDefinitions
-        .reduce(kc -> flattener.flattenArtifact((CompositeKnowledgeCarrier) kc, rootAssetId));
+        .reduce(kc -> flattener.flattenArtifact((CompositeKnowledgeCarrier) kc, rootId));
     injector(4).accept(planDefinition);
 
     // TODO FIXME Need to think about 'GC' for the kbManager.. when are KB released, vs overwritten?
