@@ -23,7 +23,6 @@ import java.util.Properties;
 import org.omg.spec.api4kp._20200801.AbstractCarrier;
 import org.omg.spec.api4kp._20200801.AbstractCompositeCarrier;
 import org.omg.spec.api4kp._20200801.Answer;
-import org.omg.spec.api4kp._20200801.Composite;
 import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.KnowledgeBaseApiInternal;
 import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.KnowledgeBaseApiInternal._getKnowledgeBaseStructure;
 import org.omg.spec.api4kp._20200801.api.transrepresentation.v4.server.DeserializeApiInternal._applyLift;
@@ -153,10 +152,10 @@ public class ComplexOwl2SKOSTransrepresentator implements _applyTransrepresent {
   }
 
 
-  private Properties getSkosifierProperties(Properties props, Pointer ptr) {
+  protected Properties getSkosifierProperties(Properties props, Pointer ptr) {
     String name = ptr.getName();
-    props.put(OWLtoSKOSTxParams.SCHEME_NAME.getName(), name + "ClinicalSituations");
-    props.put(OWLtoSKOSTxParams.TOP_CONCEPT_NAME.getName(), name + "ClinicalSituation");
+    props.put(OWLtoSKOSTxParams.SCHEME_NAME.getName(), name);
+    props.put(OWLtoSKOSTxParams.TOP_CONCEPT_NAME.getName(), name);
     return props;
   }
 
