@@ -19,23 +19,23 @@ public class PostConstructedCcpmToPlanDefPipeline extends CcpmToPlanDefPipeline 
   _getKnowledgeBaseStructure constructor;
   _assembleCompositeArtifact assembler;
 
+  ResourceIdentifier compositeAssetId;
+
   public PostConstructedCcpmToPlanDefPipeline(
       KnowledgeAssetCatalogApi cat,
       KnowledgeAssetRepositoryApi repo,
       TermsApi terms,
       _askQuery dataShapeQuery,
+      ResourceIdentifier compositeAssetId,
       URI... annotationVocabularies) {
     super(cat, repo, terms, dataShapeQuery, annotationVocabularies);
-  }
-
-  @Override
-  protected void init() {
-    super.init();
+    this.compositeAssetId = compositeAssetId;
     constructor
-        = DependencyBasedConstructor.newInstance(cat);
+        = DependencyBasedConstructor.newInstance(cat, compositeAssetId);
     assembler
         = GraphBasedAssembler.newInstance(repo);
   }
+
 
   @Override
   public Answer<Pointer> initKnowledgeBase(KnowledgeCarrier kc) {
