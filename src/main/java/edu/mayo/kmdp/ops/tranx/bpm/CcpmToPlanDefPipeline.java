@@ -107,7 +107,6 @@ public abstract class CcpmToPlanDefPipeline implements _applyNamedTransform, _in
         asList(new CmmnToPlanDefTranslator(), new DmnToPlanDefTranslator())
     );
 
-
     flattener
         = new PlanDefinitionFlattener();
 
@@ -172,7 +171,7 @@ public abstract class CcpmToPlanDefPipeline implements _applyNamedTransform, _in
 
     // Flatten the composite, which at this point is homogeneous FHIR PlanDef
     Answer<KnowledgeCarrier> planDefinition = planDefinitions
-        .reduce(kc -> flattener.flattenArtifact((CompositeKnowledgeCarrier) kc, rootId));
+        .reduce(kc -> flattener.flattenArtifact((CompositeKnowledgeCarrier) kc, rootId, null));
     injector(4).accept(planDefinition);
 
     // TODO FIXME Need to think about 'GC' for the kbManager.. when are KB released, vs overwritten?
@@ -180,7 +179,7 @@ public abstract class CcpmToPlanDefPipeline implements _applyNamedTransform, _in
 
     // prepare for the binding of the data shapes
     Answer<Pointer> planDefKB = planDefinition
-        .flatMap(kbManager::initKnowledgeBase);
+        .flatMap(m -> kbManager.initKnowledgeBase(m, null));
 
     // TODO can this be simplified? The API chaining is not yet as smooth as it should be
     Answer<KnowledgeCarrier> shapedPlanDef = planDefKB
@@ -191,7 +190,7 @@ public abstract class CcpmToPlanDefPipeline implements _applyNamedTransform, _in
             kbManager
                 .getKnowledgeBaseManifestation(conceptsPtr.getUuid(), conceptsPtr.getVersionTag())
                 .flatMap(selectedConcepts ->
-                    dataShapeQuery.askQuery(null, null, selectedConcepts))
+                    dataShapeQuery.askQuery(null, null, selectedConcepts, null))
                 .map(bindingList -> bindingList.get(0))
                 .flatMap(bindings -> planDefKB
                     .flatMap(pd -> kbManager.bind(pd.getUuid(), pd.getVersionTag(), bindings)))
@@ -218,7 +217,8 @@ public abstract class CcpmToPlanDefPipeline implements _applyNamedTransform, _in
             return dmnFlattener
                 .flattenArtifact(
                     ofMixedAnonymousComposite(rootId, allComps),
-                    rootId.getUuid())
+                    rootId.getUuid(),
+                    null)
                 .orElseThrow(RuntimeException::new);
           }
         }).collect(Collectors.toList());

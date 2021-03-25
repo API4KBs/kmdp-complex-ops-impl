@@ -38,11 +38,11 @@ public class PostConstructedCcpmToPlanDefPipeline extends CcpmToPlanDefPipeline 
 
 
   @Override
-  public Answer<Pointer> initKnowledgeBase(KnowledgeCarrier kc) {
+  public Answer<Pointer> initKnowledgeBase(KnowledgeCarrier kc, String params) {
     ResourceIdentifier rootId = kc.getAssetId();
-    return constructor.getKnowledgeBaseStructure(rootId.getUuid(), rootId.getVersionTag())
-        .flatMap(struct -> assembler.assembleCompositeArtifact(struct))
-        .flatWhole(kbManager::initKnowledgeBase);
+    return constructor.getKnowledgeBaseStructure(rootId.getUuid(), rootId.getVersionTag(), null)
+        .flatMap(struct -> assembler.assembleCompositeArtifact(struct, null))
+        .flatWhole(m -> kbManager.initKnowledgeBase(m, params));
   }
 
 

@@ -83,16 +83,14 @@ public class ComplexOwl2SKOSTransrepresentator implements _applyTransrepresent {
         .flatMap(kbComp -> selectSKOS(kBaseRef, kbComp, props));
 
     Answer<KnowledgeCarrier> ans1 = comp
-        .flatMap(o -> mireotOntology(o,props))
+        .flatMap(o -> mireotOntology(o, props))
         .flatMap(ptr -> owlToSkos(ptr, getSkosifierProperties(props, ontoPtr)));
 
-    Answer<KnowledgeCarrier> ans =
-        ans1.flatMap(x1 ->
-            ans2.flatMap(x2 -> jenaFlattener.flattenArtifact(
-                ofUniformAnonymousComposite(x1.getAssetId(), asList(x1, x2)),
-                x1.getAssetId().getUuid())));
-
-    return ans;
+    return ans1.flatMap(x1 ->
+        ans2.flatMap(x2 -> jenaFlattener.flattenArtifact(
+            ofUniformAnonymousComposite(x1.getAssetId(), asList(x1, x2)),
+            x1.getAssetId().getUuid(),
+            null)));
   }
 
   private Answer<KnowledgeCarrier> selectSKOS(
@@ -106,14 +104,12 @@ public class ComplexOwl2SKOSTransrepresentator implements _applyTransrepresent {
 
 
   protected Answer<KnowledgeCarrier> owlToSkos(Pointer ptr, Properties cfg) {
-    Answer<KnowledgeCarrier> ans1 = kbManager
+    return kbManager
         .getKnowledgeBaseManifestation(ptr.getUuid(), ptr.getVersionTag())
         .flatMap(kc -> skosifier.applyTransrepresent(
             kc,
             ModelMIMECoder.encode(rep(OWL_2)),
             PropertiesUtil.serializeProps(cfg)));
-
-    return ans1;
   }
 
   protected Answer<Pointer> mireotOntology(Pointer flatPtr, Properties props) {
@@ -132,7 +128,7 @@ public class ComplexOwl2SKOSTransrepresentator implements _applyTransrepresent {
 
 
   protected void addStructureToKB(Pointer kbRef) {
-    constructor.getKnowledgeBaseStructure(kbRef.getUuid(), kbRef.getVersionTag())
+    constructor.getKnowledgeBaseStructure(kbRef.getUuid(), kbRef.getVersionTag(), null)
         .flatMap(struct -> kbManager
             .setKnowledgeBaseStructure(kbRef.getUuid(), kbRef.getVersionTag(), struct));
   }

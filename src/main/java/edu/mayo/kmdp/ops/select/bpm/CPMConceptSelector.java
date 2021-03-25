@@ -25,7 +25,6 @@ import org.apache.jena.vocabulary.SKOS;
 import org.omg.spec.api4kp._20200801.AbstractCarrier;
 import org.omg.spec.api4kp._20200801.Answer;
 import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.KnowledgeBaseApi;
-import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.KnowledgeBaseApiInternal._flatten;
 import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.KnowledgeBaseApiInternal._select;
 import org.omg.spec.api4kp._20200801.datatypes.Bindings;
 import org.omg.spec.api4kp._20200801.id.Pointer;
@@ -38,7 +37,7 @@ public class CPMConceptSelector implements _select {
 
   // KB
   KnowledgeBaseApi kbManager;
-  DMN12ImportConstructor constructor ;
+  DMN12ImportConstructor constructor;
 
   // Reasoning
   JenaQuery qry;
@@ -66,11 +65,11 @@ public class CPMConceptSelector implements _select {
   public Answer<Pointer> select(UUID kbaseId, String versionTag, KnowledgeCarrier selectDefinition,
       String xParams) {
 
-    constructor.getKnowledgeBaseStructure(kbaseId, versionTag)
+    constructor.getKnowledgeBaseStructure(kbaseId, versionTag, xParams)
         .flatMap(struct -> kbManager
             .setKnowledgeBaseStructure(kbaseId, versionTag, struct));
 
-    Answer<Model> model = kbManager.getKnowledgeBaseComponents(kbaseId,versionTag)
+    Answer<Model> model = kbManager.getKnowledgeBaseComponents(kbaseId, versionTag, xParams)
         .flatList(Pointer.class,
             ptr -> getConceptsForComponent(kbaseId, versionTag,
                 ptr, selectDefinition, xParams))
@@ -78,7 +77,7 @@ public class CPMConceptSelector implements _select {
 
     return model
         .map(m -> ofAst(m, rep(OWL_2)))
-        .flatMap(kbManager::initKnowledgeBase);
+        .flatMap(m -> kbManager.initKnowledgeBase(m, xParams));
   }
 
   private Answer<Model> getConceptsForComponent(UUID kbaseId, String versionTag,
@@ -102,13 +101,14 @@ public class CPMConceptSelector implements _select {
             AbstractCarrier.of(
                 "SELECT ?c ?l "
                     + "WHERE { ?c <" + RDFS.label + "> ?l. }",
-                rep(SPARQL_1_1))))
+                rep(SPARQL_1_1)),
+            null))
         .mapList(Bindings.class, this::formulateConcept)
         .flatOpt(list -> ((List<Model>)list).stream().reduce(Model::add));
   }
 
 
-  private Model formulateConcept(Bindings<String,Object> bind) {
+  private Model formulateConcept(Bindings<String, Object> bind) {
     Model m = ModelFactory.createDefaultModel();
     String c = bind.get("c").toString();
     m.add(objA(c, RDF.type.getURI(), SKOS.Concept.getURI()));

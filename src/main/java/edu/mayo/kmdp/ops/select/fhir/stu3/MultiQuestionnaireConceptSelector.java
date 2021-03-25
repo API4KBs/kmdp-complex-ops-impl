@@ -44,7 +44,7 @@ public class MultiQuestionnaireConceptSelector implements _select {
         .map(List::stream)
         .reduce(ValueSet.class, this::merge)
         .map(vs -> AbstractCarrier.ofAst(vs, rep(FHIR_STU3)))
-        .flatMap(kbManager::initKnowledgeBase);
+        .flatMap(m -> kbManager.initKnowledgeBase(m, null));
   }
 
   private ValueSet merge(ValueSet v1, ValueSet v2) {
@@ -56,7 +56,7 @@ public class MultiQuestionnaireConceptSelector implements _select {
 
   private Answer<ValueSet> selectConcepts(Questionnaire questionnaire, KnowledgeCarrier selectDef) {
     return kbManager
-        .initKnowledgeBase(AbstractCarrier.ofAst(questionnaire, rep(FHIR_STU3)))
+        .initKnowledgeBase(AbstractCarrier.ofAst(questionnaire, rep(FHIR_STU3)), null)
         .flatMap(
             ptr -> kbManager.select(
                 ptr.getUuid(),
