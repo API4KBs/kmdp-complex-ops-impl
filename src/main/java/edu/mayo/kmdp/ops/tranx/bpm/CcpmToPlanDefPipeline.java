@@ -28,6 +28,7 @@ import edu.mayo.kmdp.knowledgebase.binders.fhir.stu3.PlanDefDataShapeBinder;
 import edu.mayo.kmdp.knowledgebase.flatteners.dmn.v1_2.DMN12ModelFlattener;
 import edu.mayo.kmdp.knowledgebase.flatteners.fhir.stu3.PlanDefinitionFlattener;
 import edu.mayo.kmdp.knowledgebase.selectors.fhir.stu3.PlanDefSelector;
+import edu.mayo.kmdp.knowledgebase.weavers.fhir.stu3.PlanDefTerminologyWeaver;
 import edu.mayo.kmdp.language.LanguageDeSerializer;
 import edu.mayo.kmdp.language.TransrepresentationExecutor;
 import edu.mayo.kmdp.language.parsers.cmmn.v1_1.CMMN11Parser;
@@ -42,6 +43,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import javax.annotation.PostConstruct;
+import org.apache.jena.vocabulary.SKOS;
 import org.omg.spec.api4kp._20200801.Answer;
 import org.omg.spec.api4kp._20200801.api.inference.v4.server.ReasoningApiInternal._askQuery;
 import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.CompositionalApiInternal._flattenArtifact;
@@ -49,7 +51,6 @@ import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.KnowledgeBaseAp
 import org.omg.spec.api4kp._20200801.api.knowledgebase.v4.server.TranscreateApiInternal._applyNamedTransform;
 import org.omg.spec.api4kp._20200801.api.repository.asset.v4.KnowledgeAssetCatalogApi;
 import org.omg.spec.api4kp._20200801.api.repository.asset.v4.KnowledgeAssetRepositoryApi;
-import org.omg.spec.api4kp._20200801.api.terminology.v4.TermsApi;
 import org.omg.spec.api4kp._20200801.api.transrepresentation.v4.server.DeserializeApiInternal;
 import org.omg.spec.api4kp._20200801.api.transrepresentation.v4.server.TransxionApiInternal;
 import org.omg.spec.api4kp._20200801.id.Pointer;
@@ -64,7 +65,6 @@ public abstract class CcpmToPlanDefPipeline implements _applyNamedTransform, _in
 
   KnowledgeAssetCatalogApi cat;
   KnowledgeAssetRepositoryApi repo;
-  TermsApi terms;
 
   URI[] annotationVocabularies;
 
@@ -86,13 +86,11 @@ public abstract class CcpmToPlanDefPipeline implements _applyNamedTransform, _in
   public CcpmToPlanDefPipeline(
       @Autowired KnowledgeAssetCatalogApi cat,
       @Autowired KnowledgeAssetRepositoryApi repo,
-      @Autowired TermsApi terms,
       _askQuery dataShapeQuery,
       URI... annotationVocabularies
   ) {
     this.cat = cat;
     this.repo = repo;
-    this.terms = terms;
     this.dataShapeQuery = dataShapeQuery;
     this.annotationVocabularies = annotationVocabularies;
     init();
@@ -116,6 +114,7 @@ public abstract class CcpmToPlanDefPipeline implements _applyNamedTransform, _in
     kbManager
         = new KnowledgeBaseProvider(repo)
         .withNamedSelector(PlanDefSelector::new)
+        .withNamedWeaver(PlanDefTerminologyWeaver::new)
         .withNamedBinder(PlanDefDataShapeBinder::new);
 
   }
@@ -164,7 +163,7 @@ public abstract class CcpmToPlanDefPipeline implements _applyNamedTransform, _in
     // Translate into PlanDefinition
     Answer<KnowledgeCarrier> planDefinitions =
         wovenComposite.flatMap(kc ->
-            translator.applyTransrepresent(kc, encode(rep(FHIR_STU3, SNOMED_CT, PCV)), null))
+                translator.applyTransrepresent(kc, encode(rep(FHIR_STU3, SNOMED_CT, PCV)), null))
             // TODO The translator should maybe preserve the AssetID ?
             .map(kc -> kc.withAssetId(struct.get().getAssetId()));
     injector(3).accept(planDefinitions);
@@ -191,9 +190,13 @@ public abstract class CcpmToPlanDefPipeline implements _applyNamedTransform, _in
                 .getKnowledgeBaseManifestation(conceptsPtr.getUuid(), conceptsPtr.getVersionTag())
                 .flatMap(selectedConcepts ->
                     dataShapeQuery.askQuery(null, null, selectedConcepts, null))
-                .map(bindingList -> bindingList.get(0))
-                .flatMap(bindings -> planDefKB
-                    .flatMap(pd -> kbManager.bind(pd.getUuid(), pd.getVersionTag(), bindings)))
+                .flatMap(bindings ->
+                    planDefKB.flatMap(
+                        pd -> kbManager.bind(pd.getUuid(), pd.getVersionTag(), bindings.get(0))))
+                .flatMap(ptr ->
+                    PlanDefTerminologyWeaver.getLexica(annotationVocabularies, cat, repo)
+                        .flatMap(lex -> kbManager.namedWeave(ptr.getUuid(), ptr.getVersionTag(),
+                            PlanDefTerminologyWeaver.id, lex, SKOS.altLabel.getLocalName())))
                 .flatMap(ptr -> kbManager
                     .getKnowledgeBaseManifestation(ptr.getUuid(), ptr.getVersionTag())));
 

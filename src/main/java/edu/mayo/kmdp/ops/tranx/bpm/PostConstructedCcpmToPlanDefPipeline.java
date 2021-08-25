@@ -24,11 +24,10 @@ public class PostConstructedCcpmToPlanDefPipeline extends CcpmToPlanDefPipeline 
   public PostConstructedCcpmToPlanDefPipeline(
       KnowledgeAssetCatalogApi cat,
       KnowledgeAssetRepositoryApi repo,
-      TermsApi terms,
       _askQuery dataShapeQuery,
       ResourceIdentifier compositeAssetId,
       URI... annotationVocabularies) {
-    super(cat, repo, terms, dataShapeQuery, annotationVocabularies);
+    super(cat, repo, dataShapeQuery, annotationVocabularies);
     this.compositeAssetId = compositeAssetId;
     constructor
         = DependencyBasedConstructor.newInstance(cat, compositeAssetId);

@@ -15,10 +15,9 @@ public class PreConstructedCcpmToPlanDefPipeline extends CcpmToPlanDefPipeline {
   public PreConstructedCcpmToPlanDefPipeline(
       KnowledgeAssetCatalogApi cat,
       KnowledgeAssetRepositoryApi repo,
-      TermsApi terms,
       _askQuery dataShapeQuery,
       URI... annotationVocabularies) {
-    super(cat, repo, terms, dataShapeQuery, annotationVocabularies);
+    super(cat, repo, dataShapeQuery, annotationVocabularies);
 
   }
 
