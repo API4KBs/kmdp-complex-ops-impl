@@ -33,7 +33,7 @@ import edu.mayo.kmdp.language.LanguageDeSerializer;
 import edu.mayo.kmdp.language.TransrepresentationExecutor;
 import edu.mayo.kmdp.language.parsers.cmmn.v1_1.CMMN11Parser;
 import edu.mayo.kmdp.language.parsers.dmn.v1_2.DMN12Parser;
-import edu.mayo.kmdp.language.translators.cmmn.v1_1.CmmnToPlanDefTranslator;
+import edu.mayo.kmdp.language.translators.cmmn.v1_1.stu3.CmmnToPlanDefTranslator;
 import edu.mayo.kmdp.language.translators.dmn.v1_2.DmnToPlanDefTranslator;
 import java.net.URI;
 import java.util.HashMap;
