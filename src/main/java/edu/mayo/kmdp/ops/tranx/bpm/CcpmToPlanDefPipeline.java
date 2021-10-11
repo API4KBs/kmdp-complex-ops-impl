@@ -163,9 +163,7 @@ public abstract class CcpmToPlanDefPipeline implements _applyNamedTransform, _in
     // Translate into PlanDefinition
     Answer<KnowledgeCarrier> planDefinitions =
         wovenComposite.flatMap(kc ->
-                translator.applyTransrepresent(kc, encode(rep(FHIR_STU3, SNOMED_CT, PCV)), null))
-            // TODO The translator should maybe preserve the AssetID ?
-            .map(kc -> kc.withAssetId(struct.get().getAssetId()));
+                translator.applyTransrepresent(kc, encode(rep(FHIR_STU3, SNOMED_CT, PCV)), null));
     injector(3).accept(planDefinitions);
 
     // Flatten the composite, which at this point is homogeneous FHIR PlanDef
