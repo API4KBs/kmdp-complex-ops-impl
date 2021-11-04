@@ -36,12 +36,12 @@ import edu.mayo.kmdp.language.parsers.dmn.v1_2.DMN12Parser;
 import edu.mayo.kmdp.language.translators.cmmn.v1_1.stu3.CmmnToPlanDefTranslator;
 import edu.mayo.kmdp.language.translators.dmn.v1_2.DmnToPlanDefTranslator;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 import javax.annotation.PostConstruct;
 import org.apache.jena.vocabulary.SKOS;
 import org.omg.spec.api4kp._20200801.Answer;
@@ -208,21 +208,25 @@ public abstract class CcpmToPlanDefPipeline implements _applyNamedTransform, _in
     // TODO - see if/how to improve this whole method
     CompositeKnowledgeCarrier ckc = (CompositeKnowledgeCarrier) parsedComposite.get();
     List<KnowledgeCarrier> allComps = ckc.componentList();
+    List<KnowledgeCarrier> flatComps = new ArrayList<>(allComps.size());
 
-    List<KnowledgeCarrier> flatComps = allComps.stream()
-        .map(kc -> {
-          if (CMMN_1_1.sameAs(kc.getRepresentation().getLanguage())) {
-            return kc;
-          } else {
-            ResourceIdentifier rootId = kc.getAssetId();
-            return dmnFlattener
-                .flattenArtifact(
-                    ofMixedAnonymousComposite(rootId, allComps),
-                    rootId.getUuid(),
-                    null)
-                .orElseThrow(RuntimeException::new);
-          }
-        }).collect(Collectors.toList());
+    for (KnowledgeCarrier kc : allComps) {
+      if (CMMN_1_1.sameAs(kc.getRepresentation().getLanguage())) {
+        flatComps.add(kc);
+      } else {
+        ResourceIdentifier rootId = kc.getAssetId();
+        Answer<KnowledgeCarrier> flat = dmnFlattener
+            .flattenArtifact(
+                ofMixedAnonymousComposite(rootId, allComps),
+                rootId.getUuid(),
+                null);
+        if (flat.isFailure()) {
+          return flat;
+        } else {
+          flatComps.add(flat.get());
+        }
+      }
+    }
 
     ckc.components()
         .forEach(comp -> {
