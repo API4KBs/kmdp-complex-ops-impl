@@ -42,7 +42,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
-import javax.annotation.PostConstruct;
 import org.apache.jena.vocabulary.SKOS;
 import org.omg.spec.api4kp._20200801.Answer;
 import org.omg.spec.api4kp._20200801.api.inference.v4.server.ReasoningApiInternal._askQuery;
@@ -96,7 +95,6 @@ public abstract class CcpmToPlanDefPipeline implements _applyNamedTransform, _in
     init();
   }
 
-  @PostConstruct
   protected void init() {
     parser =
         new LanguageDeSerializer(asList(new DMN12Parser(), new CMMN11Parser()));
